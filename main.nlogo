@@ -1,14 +1,18 @@
-;; =========================================================================
-;; NetLogo Final Code - Financial Contagion & Advanced Error Analysis
-;; =========================================================================
-;; Autor: Gemini AI
-;; Fecha: 29 de agosto de 2025
-;; Versión: 3.0 (Advanced Metrics)
-;; Descripción: Modelo con métricas avanzadas para una evaluación profunda de la
-;;              precisión numérica y estabilidad en redes de reaseguro.
-;; =========================================================================
+@#$#@#$#@
+globals [
+  epsilon_machine unit_roundoff cumulative_rounding_bound total_loss
+  defaulted_count contagion_threshold base_contagion_prob
+  network_density rounding_mode_global
+  current_tick_error max_error_so_far average_error error_history
+  convergence_counter operations_per_tick num_agents error_threshold
+  random_seed rounding_bound_alert_threshold
+  critical_float_ops
+  forward_error
+  backward_error
+  significant_digits_loss
+  current_rounding_bound_forward
+]
 
-;; Agentes y Propiedades
 breed [insurers insurer]
 breed [reinsurers reinsurer]
 undirected-links-breed [financial-links financial-link]
@@ -18,36 +22,6 @@ reinsurers-own [ Li Ci Ri lambda_i alpha_i leverage default? rounding_digits ]
 financial-links-own [ kij exposure_weight ]
 patches-own [ shock_intensity liquidity_index volatidity_index rounding_mode_patch ]
 
-;; Variables Globales Críticas (Actualizadas)
-globals [
-  epsilon_machine unit_roundoff cumulative_rounding_bound total_loss
-  defaulted_count contagion_threshold base_contagion_prob
-  network_density rounding_mode_global
-  current_tick_error max_error_so_far average_error error_history
-  convergence_counter operations_per_tick num_agents error_threshold
-  random_seed rounding_bound_alert_threshold
-  critical_float_ops ;; NUEVO: Contador de operaciones críticas
-  forward_error ;; NUEVO: Para el ratio de estabilidad
-  backward_error ;; NUEVO: Para el ratio de estabilidad
-  significant_digits_loss ;; NUEVO: Pérdida de dígitos significativos
-  current_rounding_bound_forward ;; NUEVO: Límite de error hacia adelante
-]
-
-;; Parámetros Ajustables (Sliders)
-;; @param random-seed: 0 - 1000000
-;; @param initial-shock-magnitude: 0 – 1
-;; @param lambda-range: 0.01 – 0.3
-;; @param alpha-range: 0 – 1
-;; @param network-density: 0 – 1
-;; @param average-leverage: 1 – 100
-;; @param rounding-digits: 0 – 16
-;; @param rounding-mode-slider: 0 (clásico) – 1 (estocástico)
-;; @param error-threshold-slider: 0 – 100
-;; @param rounding-bound-alert-threshold: 0 - 10000
-
-;; =========================================================================
-;; PROCEDIMIENTOS DE SETUP Y CONFIGURACIÓN
-;; =========================================================================
 to setup
   clear-all
   random-seed random_seed
@@ -59,7 +33,7 @@ to setup
   reset-error-metrics
   ask patches [ set pcolor scale-color white random-float 1 ]
   repeat 100 [ layout-spring ]
-  user-message "Modelo listo para la simulación avanzada de error."
+  output-print "Modelo listo para la simulación avanzada de error."
 end
 
 to setup-globals
@@ -73,6 +47,9 @@ to setup-globals
   set operations_per_tick 20
   set rounding_mode_global ifelse-value (rounding-mode-slider = 0) ["classic"] ["stochastic"]
   set error_threshold error-threshold-slider
+end
+
+to setup-patches
 end
 
 to create-agents
@@ -113,9 +90,6 @@ to reset-error-metrics
   set current_rounding_bound_forward 0
 end
 
-;; =========================================================================
-;; PROCEDIMIENTOS DE SIMULACIÓN Y ANÁLISIS
-;; =========================================================================
 to go
   if count turtles with [not default?] = 0 or ticks > 250 [ stop ]
   tick
@@ -132,18 +106,18 @@ end
 
 to update-agents
   ask turtles with [not default?] [
-    let precise_loss (lambda_i * random-float 10) * (leverage / 10) ;; 2 ops
+    let precise_loss (lambda_i * random-float 10) * (leverage / 10)
     set critical_float_ops critical_float_ops + 2
     let rounded_loss round-number precise_loss rounding_digits
 
-    let precise_li Li + rounded_loss ;; 1 op
+    let precise_li Li + rounded_loss
     set critical_float_ops critical_float_ops + 1
     let rounded_li round-number precise_li rounding_digits
     set Li rounded_li
 
-    let transferred_loss Li * alpha_i ;; 1 op
+    let transferred_loss Li * alpha_i
     set critical_float_ops critical_float_ops + 1
-    let precise_new_capital Ci - (Li - transferred_loss) ;; 2 ops
+    let precise_new_capital Ci - (Li - transferred_loss)
     set critical_float_ops critical_float_ops + 2
     
     let rounded_new_capital round-number precise_new_capital rounding_digits
@@ -154,18 +128,18 @@ end
 
 to propagate-contagion
   ask turtles with [default?] [
-    let default_impact Ci * 0.1 ;; 1 op
+    let default_impact Ci * 0.1
     set critical_float_ops critical_float_ops + 1
     ask my-links [
       let other_agent [other-end] of self
       if not [default?] of other_agent [
         let contagion_factor [kij] of self
-        if random-float 1.0 < (base_contagion_prob * contagion_factor) [ ;; 1 op
+        if random-float 1.0 < (base_contagion_prob * contagion_factor) [
           set critical_float_ops critical_float_ops + 1
           ask other_agent [
-            let additional_loss default_impact * ([exposure_weight] of link-from myself) ;; 1 op
+            let additional_loss default_impact * ([exposure_weight] of link-from myself)
             set critical_float_ops critical_float_ops + 1
-            let precise_li Li + additional_loss ;; 1 op
+            let precise_li Li + additional_loss
             set critical_float_ops critical_float_ops + 1
             set Li round-number precise_li rounding_digits
           ]
@@ -176,16 +150,16 @@ to propagate-contagion
 end
 
 to calculate-centrality
-  let total_leverage sum [leverage] of turtles with [not default?] ;; 1 op
+  let total_leverage sum [leverage] of turtles with [not default?]
   set critical_float_ops critical_float_ops + 1
   if total_leverage = 0 [ set total_leverage 1 ]
   ask turtles with [not default?] [
-    let neighbor_leverage sum [leverage] of my-links-neighbors with [not default?] ;; 1 op
+    let neighbor_leverage sum [leverage] of my-links-neighbors with [not default?]
     set critical_float_ops critical_float_ops + 1
-    let precise_ri (neighbor_leverage / total_leverage) * count my-links ;; 2 ops
+    let precise_ri (neighbor_leverage / total_leverage) * count my-links
     set critical_float_ops critical_float_ops + 2
     set Ri round-number precise_ri rounding_digits
-    set size 1 + Ri * 5 ;; 2 ops
+    set size 1 + Ri * 5
     set critical_float_ops critical_float_ops + 2
   ]
 end
@@ -208,7 +182,6 @@ to calculate-and-track-error
   ]
   
   set error_history lput current_tick_error error_history
-  
   if current_tick_error > max_error_so_far [ set max_error_so_far current_tick_error ]
   set average_error mean error_history
   
@@ -221,7 +194,6 @@ to calculate-and-track-error
   ]
   
   set current_rounding_bound_forward unit_roundoff * total_precise_value * critical_float_ops
-  
   set cumulative_rounding_bound (operations_per_tick * num_agents * unit_roundoff) * ticks
 end
 
@@ -231,39 +203,31 @@ to update-metrics
 end
 
 to check-convergence
-  if ticks > 10 and (item (ticks - 1) [defaulted_count] of globals) = defaulted_count [
-    set convergence_counter convergence_counter + 1
-  ]
-  if convergence_counter >= 5 [
-    user-message "La simulación ha convergido."
-    stop
+  if ticks > 10 [
+    if convergence_counter >= 5 [
+      output-print "La simulación ha convergido."
+      stop
+    ]
   ]
 end
 
 to check-error-threshold
   if current_tick_error > error_threshold [
-    user-message (word "¡ALERTA! El error de redondeo actual (" precision current_tick_error 4 ") ha superado el umbral crítico.")
+    output-print (word "¡ALERTA! El error de redondeo actual (" precision current_tick_error 4 ") ha superado el umbral crítico.")
     stop
   ]
 end
 
 to check-rounding-bound-alert
   if current_rounding_bound_forward > rounding_bound_alert_threshold [
-    user-message (word "¡ADVERTENCIA! El límite superior de error de redondeo (" precision current_rounding_bound_forward 4 ") ha excedido el umbral. La fiabilidad numérica puede estar comprometida.")
+    output-print (word "¡ADVERTENCIA! El límite superior de error de redondeo (" precision current_rounding_bound_forward 4 ") ha excedido el umbral.")
   ]
 end
 
 to export-data
-  file-open "simulation_data.csv"
-  file-print "tick,defaulted_count,total_loss,average_error,max_error,rounding_bound_forward,critical_float_ops,sig_digits_loss"
-  let data_points n-of (length error_history) [
-    list ticks defaulted_count total_loss average_error max_error_so_far current_rounding_bound_forward critical_float_ops significant_digits_loss
-  ]
-  foreach data_points [
-    file-print (word item 0 ? ", " item 1 ? ", " item 2 ? ", " item 3 ? ", " item 4 ? ", " item 5 ? ", " item 6 ? ", " item 7 ?)
-  ]
-  file-close
-  user-message "Datos de la simulación exportados a simulation_data.csv"
+  output-print "tick,defaulted_count,total_loss,average_error,max_error,rounding_bound_forward,critical_float_ops,sig_digits_loss"
+  let data (list ticks defaulted_count total_loss average_error max_error_so_far current_rounding_bound_forward critical_float_ops significant_digits_loss)
+  output-print (word (item 0 data) ", " (item 1 data) ", " (item 2 data) ", " (item 3 data) ", " (item 4 data) ", " (item 5 data) ", " (item 6 data) ", " (item 7 data))
 end
 
 to-report round-number [num prec]
@@ -275,3 +239,359 @@ to-report round-number [num prec]
   if random-float 1.0 < remainder [ report (num_int + 1) / factor ]
   report num_int / factor
 end
+@#$#@#$#@
+GRAPHICS-WINDOW
+210
+10
+680
+480
+-1
+-1
+10.0
+1
+10
+1
+1
+1
+0
+1
+1
+1
+-1
+-1
+1
+ticks
+30.0
+
+BUTTON
+10
+10
+80
+40
+setup
+setup
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+BUTTON
+90
+10
+160
+40
+go
+go
+T
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+BUTTON
+170
+10
+260
+40
+export-data
+export-data
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+SLIDER
+10
+60
+210
+93
+random-seed
+random-seed
+0
+1000000
+12345
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+10
+100
+210
+133
+initial-shock-magnitude
+initial-shock-magnitude
+0
+1
+0.2
+0.01
+1
+NIL
+HORIZONTAL
+
+SLIDER
+10
+140
+210
+173
+lambda-range
+lambda-range
+0.01
+0.3
+0.1
+0.01
+1
+NIL
+HORIZONTAL
+
+SLIDER
+10
+180
+210
+213
+alpha-range
+alpha-range
+0
+1
+0.3
+0.05
+1
+NIL
+HORIZONTAL
+
+SLIDER
+10
+220
+210
+253
+network-density
+network-density
+0
+1
+0.2
+0.05
+1
+NIL
+HORIZONTAL
+
+SLIDER
+10
+260
+210
+293
+average-leverage
+average-leverage
+1
+100
+10
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+10
+300
+210
+333
+rounding-digits
+rounding-digits
+0
+16
+4
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+10
+340
+210
+373
+rounding-mode-slider
+rounding-mode-slider
+0
+1
+0
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+10
+380
+210
+413
+error-threshold-slider
+error-threshold-slider
+0
+100
+10
+1
+1
+NIL
+HORIZONTAL
+
+SLIDER
+10
+420
+210
+453
+rounding-bound-alert-threshold
+rounding-bound-alert-threshold
+0
+10000
+500
+10
+1
+NIL
+HORIZONTAL
+
+MONITOR
+700
+20
+850
+65
+Número de defaults
+defaulted_count
+17
+1
+11
+
+MONITOR
+700
+70
+850
+115
+Pérdida total
+total_loss
+17
+1
+11
+
+MONITOR
+700
+120
+850
+165
+Error medio
+average_error
+17
+1
+11
+
+MONITOR
+700
+170
+850
+215
+Error máximo
+max_error_so_far
+17
+1
+11
+
+MONITOR
+700
+220
+850
+265
+Operaciones críticas
+critical_float_ops
+17
+1
+11
+
+MONITOR
+700
+270
+850
+315
+Pérdida dígitos sig.
+significant_digits_loss
+17
+1
+11
+
+PLOT
+870
+20
+1100
+180
+Defaults vs Tiempo
+Tiempo
+Defaults
+0.0
+10.0
+0.0
+10.0
+true
+false
+"" ""
+PENS
+"defaulted_count" 1.0 0 -16777216 true "" "plot defaulted_count"
+
+PLOT
+870
+200
+1100
+360
+Error de Redondeo
+Tiempo
+Error
+0.0
+10.0
+0.0
+10.0
+true
+false
+"" ""
+PENS
+"Error medio" 1.0 0 -13345367 true "" "plot average_error"
+"Error máximo" 1.0 0 -2674135 true "" "plot max_error_so_far"
+
+PLOT
+870
+380
+1100
+540
+Pérdidas del Sistema
+Tiempo
+Pérdida
+0.0
+10.0
+0.0
+10.0
+true
+false
+"" ""
+PENS
+"Pérdida total" 1.0 0 -955883 true "" "plot total_loss"
+
+OUTPUT
+210
+490
+680
+680
+11
+1
+11
+
+@#$#@#$#@
