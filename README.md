@@ -1,4 +1,8 @@
-"""Con respecto al código New Model.nlogo"""
+Se actualizaron errores de exposicion, se hizo que las entidades centrales, con mas nodos, tengan mas capital y se aumento el numero maximo de entidades financieras
+
+
+
+"""Con respecto al código modelofinal.nlogo"""
 El modelo permite estudiar cómo se propaga un shock financiero en una red de empresas, considerando errores de redondeo, centralidad de los nodos y la convergencia del sistema. Esto da una herramienta simple de análisis actuarial para observar vulnerabilidades y estabilidad numérica de un sistema financiero interconectado.
 Este modelo simula un sistema financiero compuesto por empresas (tortugas), incluyendo seguros y reaseguros, donde:
 
